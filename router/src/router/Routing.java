@@ -311,65 +311,66 @@ public class Routing {
         return rtab;
     }
     
-    /*
-     *  Sees if node node exists in the local vector of origin node
+    
+     /**
+     * Get the shortest route from routing table
      * 
+     *@param tab   present routing table
+     *@return minroute   shortest route
+     */
+    public RouteEntry getMinRoute(RoutingTable tab){
+       int min = 10000000;
+       RouteEntry minroute = null;
+       
+       for(RouteEntry route1 : tab.get_routeset()){
+            if(route1.is_final() == false){
+                if(route1.dist < min){
+                    minroute = route1;
+                    min=route1.dist; 
+                }    
+            }
+       }
+       return minroute;   
+    }  
+    
+    
+     /**
+     * Discover all the routes from nextN's neighbours to nextN
      * 
-    */
-    public boolean NodeExists(Entry node){
+     *@param tab present routing table
+     *@param nextN selected node
+     *@param Prevdist previous distance 
+     */
+    public void ExploreRoute(RoutingTable tab, char nextN,int Prevdist){
         
-        boolean ok = false;
-        
-        for(Entry vector1 : neig.local_vec(true)){
-               
-              if(node.dest == vector1.dest) ok = true;
-
-        }
-        
-        return ok;
-    }
-  
-
-    public RouteEntry SmallestRoute(RoutingTable tab,char origin, int Prevdist){
-        
-        RouteEntry route1, route = null;
-        char nextN;
-        int min = 100000000;
+        RouteEntry route;
         int cont=0;
  
-        RouterInfo neighbours = map.get(origin);
+        RouterInfo neighbours = map.get(nextN);
         if(neighbours != null){
             for(Entry vector1 : neighbours.vec){
-        
-                cont = vector1.dist + Prevdist;         
-                route1 = tab.get_RouteEntry(vector1.dest);
-                if(route1 != null ){
-                    if(cont < min && route1.is_final() == false && cont <= Router.MAX_DISTANCE){
-                        min = cont;
-                        nextN = vector1.dest;
-                        route = new RouteEntry(nextN,origin,min);
+                route = tab.get_RouteEntry(vector1.dest);
+                if(route != null ){
+                   if(route.is_final() == false){
+                        //If the route re is shortest than route re2(already in table), update re2
+                        cont = Prevdist + vector1.dist;
+                        if(route.dist > cont){ 
+                            route.update_dist(cont);
+                            route.next_hop = nextN;
+                        }
+                        
+                    }
 
-                     }
                 }
                 else{
-                     if(cont < min && cont <= Router.MAX_DISTANCE){
-                        min = cont;
-                        nextN = vector1.dest;
-                        route = new RouteEntry(nextN,origin,min);
-
-                     }
+                    cont = vector1.dist+Prevdist;
+                    route = new RouteEntry(vector1.dest,nextN,cont);
+                    tab.add_route(route);
                 }
-            }
-           
-            return route; 
+            }          
         }
-        else 
-            return null;
-    }
-    
+    }    
    
-
-    
     
     /*******************************
      * Dijkstra implementation
@@ -383,128 +384,47 @@ public class Routing {
      * @return the routing table calculated
      */
     public RoutingTable run_dijkstra(char origin) {
-        char nextN = origin;
-        RouteEntry re;
+        char nextN; //Initially next node to be fixed is origin node
+        RouteEntry re; 
         RoutingTable tab= new RoutingTable();
-        int Prevdist = 0;
-        boolean tentatives = true;
-     
-        int min = 1000000, total = 0;
+        int Prevdist = 0; //Sum of the shortest route distances 
+        boolean tentatives = true; //if exist tentative nodes => tentatives = true
+
        
         // Create route entry with local node
         re= new RouteEntry(origin, ' ', 0);
         re.set_final();     // Set the local node final
         tab.add_route(re); // Add the route entry to the routing table
         
-        // Implement the Dijkstra algorithm here
-        // Read carefully the pages 366-369 of Computer Networks 5th edition
-        // to understand how it is done
-        // Remember that there is a maximum distance allowed!
-        // ...
-  
+
         
         for(Entry vector : neig.local_vec(true)){
-                if(tab.get_RouteEntry(vector.dest)==null){
+            //Add route entry of all adjacent nodes 
+            if(origin != vector.dest){
+                re = new RouteEntry(vector.dest,vector.dest,vector.dist);
+                tab.add_route(re); 
+            }
                    
-                    re = new RouteEntry(vector.dest,vector.dest,vector.dist);
-                    tab.add_route(re);
-                
-                }
-                total = vector.dist + Prevdist;         
-                if(total != 0){
-                    if(total < min && total <= Router.MAX_DISTANCE){
-                        min = total;
-                        nextN = vector.dest;
-                    }
-                }
-            
         }
-     
-        if(total!=0){
-            //re = new RouteEntry(nextN,origin,min);
-            re = tab.get_RouteEntry(nextN);
-            re.set_final();
-            //tab.add_route(re);
-            origin = nextN;
-            Prevdist = min;
-        }
-        else{
-            
-            return tab;
-        
-        } 
-        
-        
-        
-        
+
         while(tentatives == true){   
-
-             /*  for(Entry en1 : tab.get_Entry_vector()){
-
-                    if(!NodeExists(en1)) tab.removeRoute(en1.dest);
-
-                }*/
-              
-                re = SmallestRoute(tab,origin,Prevdist);
-               
-                if(re != null){ 
-                     
-                   if(tab.get_RouteEntry(re.dest)==null){
-                        re.set_final(); 
-                        tab.add_route(re);
-                        origin = re.dest;
-                        Prevdist = re.dist;
-                    }
-                    else{
-                       
-                        RouteEntry re2 = tab.get_RouteEntry(re.dest);
-                        if(re2.is_final() == false){
-                            re2.update_dist(re.dist);
-                            re2.next_hop = re.next_hop;
-                            re2.set_final(); 
-                            origin = re.dest; 
-                            Prevdist = re.dist;
-                        }    
-                   }
-                } 
-                else{
-                   return tab;
-                }
-
-               
-               tentatives = false;
-               RouterInfo ro = map.get(origin);
-               if(ro!=null){
-                    for(Entry vector : ro.vec){
-                           RouteEntry rou ;
-                           rou = tab.get_RouteEntry(vector.dest);
-                           if(rou == null){ 
-                               tentatives = true;
-                               break;
-
-                            }
-                           else{
-                                if(rou.is_final() == false){ 
-                                    tentatives = true;
-                                    break;
-                                
-                                }
-                           }
-                     }
-               }
-               
-        }
-        
-        
-        return tab; // Return the table   
-           
-      
                 
+                re = getMinRoute(tab);//Get shortest route from table tab
+                if(re != null){
+                    re.set_final();
+                    Prevdist = re.dist;
+                    nextN=re.dest;
+                    ExploreRoute(tab,nextN,Prevdist); //discover more shortest routes 
+                }
+                else break;
+               //Exist more tentative nodes to explore or not
+                tentatives = false;        
+                for(RouteEntry route1 : tab.get_routeset()){
+                    if(route1.is_final() == false ){ tentatives = true;break;}
+                }
+        }
 
-        
-        // Max_Distance=30
-        
-        
+        return tab; // Return the table   
         
     }
 
@@ -537,19 +457,19 @@ public class Routing {
         try {
             // WARNING: always use multicast
             // Place here the code to send unicast if (!use_multicast)
-           /* if(!use_multicast){
-               ds.send(dp);
+            /*if(!use_multicast){
+               neig.send_packet(ds, dp,);
                 
                return true; 
-            }
-            else{*/
+            }*/
+            //else{
                 mdaemon.send_packet(dp);
 
                 lastSending = new Date();
                 win.ROUTE_snt++;
                 win.ROUTE_loc++;
                 return true;
-            //}    
+           //}    
         } catch (IOException e) {
             win.Log("Error sending ROUTE: " + e + "\n");
             return false;
